@@ -1,13 +1,39 @@
 import { MongoClient } from "mongodb";
+import express from "express";
+import dayjs from "dayjs";
+import dotenv from "dotenv";
 
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+dotenv.config();
+
+const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
-mongoClient.connect().then(() => {
-  db = mongoClient.db("API_batepapo_uol");
+const server = express();
+server.use(express.json());
+
+server.post("/participants", async (req, res) => {
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("API_batepapo_uol");
+
+    const userInsertion = { ...req.body, lastStatus: Date.now() };
+    await db.collection("users").insertOne(userInsertion);
+
+    const statusInsertion = {
+      from: req.body.name,
+      to: "Todos",
+      text: "entra na sala...",
+      type: "status",
+      time: dayjs().format("HH:mm:ss"),
+    };
+    await db.collection("messages").insertOne(statusInsertion);
+
+    res.sendStatus(201);
+    if (mongoClient) mongoClient.close();
+  } catch {
+    res.status(500).send("Internal server error");
+    if (mongoClient) mongoClient.close();
+  }
 });
 
-db.collection("users").insertOne({
-  email: "joao@email.com",
-  password: "minha_super_senha",
-});
+server.listen(5000);
