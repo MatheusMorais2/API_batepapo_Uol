@@ -16,6 +16,21 @@ const userSchema = joi.object({
   name: joi.string().required(),
 });
 
+async function getUserList() {
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("Api_batepapo_uol");
+
+    const userList = await db.collection("users").find({}).toArray();
+
+    if (mongoClient) mongoClient.close();
+    return userList;
+  } catch {
+    if (mongoClient) mongoClient.close();
+    return -1;
+  }
+}
+
 server.post("/participants", async (req, res) => {
   const validation = userSchema.validate(req.body);
   if (validation.error) {
@@ -30,6 +45,7 @@ server.post("/participants", async (req, res) => {
     let isNameDuplicate = await db.collection("users").findOne(req.body);
     if (isNameDuplicate) {
       res.status(409).send("Usuario ja cadastrado");
+      if (mongoClient) mongoClient.close();
       return;
     }
 
@@ -58,11 +74,59 @@ server.get("/participants", async (req, res) => {
     await mongoClient.connect();
     db = mongoClient.db("API_batepapo_uol");
 
-    const userList = await db.collection("users").find().toArray();
-    res.status(201).send(userList);
+    const userListRaw = await db.collection("users").find({}).toArray();
+    const userList = userListRaw.map((elem) => elem.name);
 
+    res.status(201).send(userList);
     if (mongoClient) mongoClient.close();
   } catch {
+    res.status(500).send("Internal server error");
+    if (mongoClient) mongoClient.close();
+  }
+});
+
+server.post("/messages", async (req, res) => {
+  const bodySchema = joi.object({
+    to: joi.string().required(),
+    text: joi.string().required(),
+    type: joi.valid("message", "private_message"),
+  });
+  const headerSchema = joi.string().required();
+
+  const bodyValidation = bodySchema.validate(req.body);
+  const headerValidation = headerSchema.validate(req.headers.user);
+
+  if (bodyValidation.error || headerValidation.error) {
+    res.sendStatus(422);
+    return;
+  }
+
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("API_batepapo_uol");
+
+    const isUserOn = await db
+      .collection("users")
+      .findOne({ name: req.headers.user });
+
+    if (isUserOn) {
+      const messageInsertion = {
+        ...req.body,
+        from: req.headers.user,
+        time: dayjs().format("HH:mm:ss"),
+      };
+
+      await db.collection("messages").insertOne(messageInsertion);
+
+      res.sendStatus(201);
+      if (mongoClient) mongoClient.close();
+      return;
+    } else {
+      res.sendStatus(422);
+      if (mongoClient) mongoClient.close();
+      return;
+    }
+  } catch (error) {
     res.status(500).send("Internal server error");
     if (mongoClient) mongoClient.close();
   }
