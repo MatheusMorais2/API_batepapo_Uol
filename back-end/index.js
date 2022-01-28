@@ -2,6 +2,7 @@ import { MongoClient } from "mongodb";
 import express from "express";
 import dayjs from "dayjs";
 import dotenv from "dotenv";
+import joi from "joi";
 
 dotenv.config();
 
@@ -11,10 +12,26 @@ let db;
 const server = express();
 server.use(express.json());
 
+const userSchema = joi.object({
+  name: joi.string().required(),
+});
+
 server.post("/participants", async (req, res) => {
+  const validation = userSchema.validate(req.body);
+  if (validation.error) {
+    res.status(422).send(validation.error.details);
+    return;
+  }
+
   try {
     await mongoClient.connect();
     db = mongoClient.db("API_batepapo_uol");
+
+    let isNameDuplicate = await db.collection("users").findOne(req.body);
+    if (isNameDuplicate) {
+      res.status(409).send("Usuario ja cadastrado");
+      return;
+    }
 
     const userInsertion = { ...req.body, lastStatus: Date.now() };
     await db.collection("users").insertOne(userInsertion);
