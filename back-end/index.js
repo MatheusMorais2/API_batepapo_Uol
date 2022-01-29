@@ -173,4 +173,42 @@ server.get("/messages", async (req, res) => {
   }
 });
 
+server.post("/status", async (req, res) => {
+  const headerSchema = joi.string().required();
+  const headerValidation = headerSchema.validate(req.headers.user);
+  if (headerValidation.error) {
+    res.sendStatus(422);
+    return;
+  }
+
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("API_batepapo_uol");
+
+    const user = await db
+      .collection("users")
+      .findOne({ name: req.headers.user });
+
+    console.log(user);
+
+    if (user) {
+      await db.collection("users").updateOne(
+        {
+          _id: user._id,
+        },
+        { $set: { lastStatus: Date.now() } }
+      );
+      res.sendStatus(200);
+    } else {
+      res.sendStatus(404);
+    }
+
+    if (mongoClient) mongoClient.close();
+    return;
+  } catch {
+    res.status(500).send("Internal server error");
+    if (mongoClient) mongoClient.close();
+  }
+});
+
 server.listen(5000);
