@@ -12,10 +12,6 @@ let db;
 const server = express();
 server.use(express.json());
 
-const userSchema = joi.object({
-  name: joi.string().required(),
-});
-
 async function getUserList() {
   try {
     await mongoClient.connect();
@@ -32,6 +28,10 @@ async function getUserList() {
 }
 
 server.post("/participants", async (req, res) => {
+  const userSchema = joi.object({
+    name: joi.string().required(),
+  });
+
   const validation = userSchema.validate(req.body);
   if (validation.error) {
     res.status(422).send(validation.error.details);
@@ -126,7 +126,48 @@ server.post("/messages", async (req, res) => {
       if (mongoClient) mongoClient.close();
       return;
     }
-  } catch (error) {
+  } catch {
+    res.status(500).send("Internal server error");
+    if (mongoClient) mongoClient.close();
+  }
+});
+
+server.get("/messages", async (req, res) => {
+  let limit = parseInt(req.query.limit);
+  if (!limit) limit = Number.POSITIVE_INFINITY;
+
+  const headerSchema = joi.string().required();
+  const headerValidation = headerSchema.validate(req.headers.user);
+  if (headerValidation.error) {
+    res.sendStatus(422);
+    return;
+  }
+
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("API_batepapo_uol");
+
+    const messages = await db.collection("messages").find({}).toArray();
+    let messagesOutput = [];
+
+    for (
+      let i = messages.length - 1;
+      i >= messages.length - limit && i >= 0;
+      i--
+    ) {
+      if (
+        messages[i].from === req.headers.user ||
+        messages[i].to === req.headers.user ||
+        messages[i].to === "Todos" ||
+        messages[i].type === "message"
+      ) {
+        messagesOutput.push(messages[i]);
+      }
+    }
+
+    res.status(201).send(messagesOutput);
+    if (mongoClient) mongoClient.close();
+  } catch {
     res.status(500).send("Internal server error");
     if (mongoClient) mongoClient.close();
   }
