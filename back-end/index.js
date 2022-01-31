@@ -1,4 +1,4 @@
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import express from "express";
 import dayjs from "dayjs";
 import dotenv from "dotenv";
@@ -210,5 +210,34 @@ server.post("/status", async (req, res) => {
     if (mongoClient) mongoClient.close();
   }
 });
+
+setInterval(async () => {
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("API_batepapo_uol");
+
+    const tenSecAgo = Date.now() - 10000;
+    let awayUsers = await db
+      .collection("users")
+      .find({ lastStatus: { $lt: tenSecAgo } })
+      .toArray();
+
+    awayUsers.map(async (elem) => {
+      await db.collection("users").deleteOne({ _id: new ObjectId(elem._id) });
+
+      const messageInsertion = {
+        from: elem.name,
+        to: "Todos",
+        text: "sai da sala...",
+        type: "status",
+        time: dayjs().format("HH:mm:ss"),
+      };
+
+      await db.collection("messages").insertOne(messageInsertion);
+    });
+  } catch {
+    console.log("Error deleting AFK users");
+  }
+}, 15000);
 
 server.listen(5000);
